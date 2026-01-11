@@ -25,6 +25,68 @@ function getBurnId(){
   return el?.getAttribute('content') || '';
 }
 
+function renderBurned(reason){
+  document.body.innerHTML = '';
+  document.body.style.margin = '0';
+  document.body.style.height = '100vh';
+  document.body.style.background = '#05070b';
+  document.body.style.color = '#e8eaed';
+  document.body.style.fontFamily = 'ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial';
+
+  const wrap = document.createElement('div');
+  wrap.style.height = '100%';
+  wrap.style.display = 'flex';
+  wrap.style.flexDirection = 'column';
+  wrap.style.alignItems = 'center';
+  wrap.style.justifyContent = 'center';
+  wrap.style.gap = '10px';
+  wrap.style.textAlign = 'center';
+  wrap.style.padding = '24px';
+
+  const big = document.createElement('div');
+  big.textContent = '已焚毁';
+  big.style.fontSize = '64px';
+  big.style.fontWeight = '800';
+  big.style.letterSpacing = '4px';
+
+  const txt = document.createElement('div');
+  txt.textContent = reason ? `（${reason}）刷新/重新打开链接将返回 404` : '刷新/重新打开链接将返回 404';
+  txt.style.color = '#9aa0a6';
+  txt.style.fontSize = '14px';
+
+  wrap.appendChild(big);
+  wrap.appendChild(txt);
+  document.body.appendChild(wrap);
+}
+
+function setupAutoBurn(id){
+  const k = `burn:viewed:${id}`;
+  let burned = false;
+
+  const burnNow = (reason) => {
+    if (burned) return;
+    burned = true;
+    try { sessionStorage.setItem(k, '1'); } catch {}
+    renderBurned(reason || '');
+  };
+
+  // If restored from bfcache or already viewed in this tab, burn immediately
+  try {
+    if (sessionStorage.getItem(k) === '1') burnNow('本标签页已查看过');
+  } catch {}
+
+  // When page goes background / is being unloaded, burn the view
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) burnNow('页面进入后台');
+  });
+  window.addEventListener('pagehide', () => burnNow('离开页面'));
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) burnNow('从缓存恢复');
+  });
+
+  return { burnNow };
+}
+
 async function fetchCipher(id, keyHash){
   const maxTry = 6;
   const delays = [0, 250, 400, 650, 1000, 1500];
@@ -60,6 +122,8 @@ async function main(){
     return;
   }
 
+  const burner = setupAutoBurn(id);
+
   const keyB64u = (location.hash || '').replace(/^#/, '');
   if(!keyB64u){
     document.body.textContent = '缺少解密密钥（#key）。';
@@ -78,8 +142,7 @@ async function main(){
   const key = await crypto.subtle.importKey('raw', keyBytes, {name:'AES-GCM'}, false, ['decrypt']);
   const plainBuf = await crypto.subtle.decrypt({name:'AES-GCM', iv: ivBytes}, key, cipherBuf);
 
-  // try to drop secrets
-  // (best-effort; JS engines may keep copies)
+  // best-effort secret wipe
   keyBytes.fill(0);
 
   const blob = new Blob([plainBuf], {type: mime});
@@ -100,6 +163,12 @@ async function main(){
   document.body.style.margin = '0';
   document.body.style.background = '#000';
   document.body.appendChild(img);
+
+  // Mark as viewed in this tab AFTER successfully rendering
+  try { sessionStorage.setItem(`burn:viewed:${id}`, '1'); } catch {}
+
+  // If you want to burn immediately after first paint (very aggressive), uncomment:
+  // setTimeout(() => burner.burnNow('已展示完成'), 0);
 }
 main().catch(err => {
   document.body.textContent = '解密失败：' + (err?.message || String(err));

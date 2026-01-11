@@ -26,7 +26,11 @@ function notFoundHtml() {
 </html>`;
   return new Response(html, {
     status: 404,
-    headers: { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-store, max-age=0' }
+    headers: {
+      'content-type':'text/html; charset=utf-8',
+      'cache-control':'no-store, max-age=0'
+      // Do NOT add X-Robots-Tag here per your requirement
+    }
   });
 }
 
@@ -48,10 +52,27 @@ function viewHtml(id) {
 <script src="/view.js"></script>
 </body>
 </html>`;
-  return new Response(html, {
-    status: 200,
-    headers: { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-store, max-age=0' }
-  });
+
+  // Only for the image view page (200):
+  // - noindex: prevents crawlers from indexing the one-time link page (they also don't have #key anyway)
+  // - CSP: keep it self-only for this page to reduce XSS risks; should not affect ads because this page won't host ads
+  const headers = {
+    'content-type':'text/html; charset=utf-8',
+    'cache-control':'no-store, max-age=0',
+    'X-Robots-Tag': 'noindex, nofollow, noarchive',
+    'Content-Security-Policy': [
+      "default-src 'self'",
+      "base-uri 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' blob: data:",
+      "connect-src 'self'",
+    ].join('; ')
+  };
+
+  return new Response(html, { status: 200, headers });
 }
 
 export async function onRequest({ env, params }) {
