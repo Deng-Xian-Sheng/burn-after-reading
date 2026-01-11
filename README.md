@@ -31,7 +31,7 @@
 4. 创建 **Pages 项目**，连接本 GitHub 仓库
 5. 在 Pages 项目 Settings 里绑定：
    - D1 binding：`DB`
-   - R2 binding：`BUCKET`
+   - KV binding：`KV`
 6. 设置自定义域名：`burn.daylog.top`
 7. 部署
 

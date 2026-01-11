@@ -9,36 +9,55 @@ export async function onRequest({ request, env, params }) {
 
   const now = Math.floor(Date.now() / 1000);
 
-  // 原子：只有第一次且 key_hash 匹配且未过期 才能把 consumed_at 从 NULL 改为 now，并取到元信息
-  const row = await env.DB.prepare(
+  // 先校验（不消耗），避免 DoS：只有 key_hash 匹配才会去读 KV
+  const meta = await env.DB.prepare(
+    `SELECT kv_key, mime, iv_b64u
+       FROM images
+      WHERE id = ?1
+        AND consumed_at IS NULL
+        AND expires_at > ?2
+        AND key_hash = ?3`
+  ).bind(id, now, keyHash).first();
+
+  if (!meta) return new Response('Not Found', { status: 404 });
+
+  // KV is eventually consistent: right after upload, reads might briefly miss.
+  const cipher = await env.KV.get(meta.kv_key, { type: 'arrayBuffer' });
+  if (!cipher) {
+    return new Response('Not ready, retry', {
+      status: 503,
+      headers: {
+        'cache-control': 'no-store',
+        'retry-after': '1'
+      }
+    });
+  }
+
+  // 原子消耗：只有第一次能成功把 consumed_at 从 NULL 改为 now
+  const r = await env.DB.prepare(
     `UPDATE images
-       SET consumed_at = ?1
-     WHERE id = ?2
-       AND consumed_at IS NULL
-       AND expires_at > ?1
-       AND key_hash = ?3
-     RETURNING r2_key, mime, iv_b64u`
-  ).bind(now, id, keyHash).first();
+        SET consumed_at = ?1
+      WHERE id = ?2
+        AND consumed_at IS NULL
+        AND expires_at > ?1
+        AND key_hash = ?3`
+  ).bind(now, id, keyHash).run();
 
-  if (!row) return new Response('Not Found', { status: 404 });
-
-  const obj = await env.BUCKET.get(row.r2_key);
-  if (!obj) {
-    // R2 已被 lifecycle 删除或异常丢失：这里直接 404，并清理 D1 记录
-    await env.DB.prepare(`DELETE FROM images WHERE id = ?1`).bind(id).run();
+  if ((r?.meta?.changes || 0) !== 1) {
+    // 已被别人读走/或过期/或 key 不匹配
     return new Response('Not Found', { status: 404 });
   }
 
   // 删除密文（阅后即焚）
-  await env.BUCKET.delete(row.r2_key);
+  await env.KV.delete(meta.kv_key);
 
-  return new Response(obj.body, {
+  return new Response(cipher, {
     status: 200,
     headers: {
       'content-type': 'application/octet-stream',
       'cache-control': 'no-store',
-      'x-mime': row.mime,
-      'x-iv': row.iv_b64u,
+      'x-mime': meta.mime,
+      'x-iv': meta.iv_b64u,
     }
   });
 }

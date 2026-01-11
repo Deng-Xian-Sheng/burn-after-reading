@@ -33,18 +33,17 @@ export async function onRequest({ request, env }) {
   if (size > 5 * 1024 * 1024) return new Response('File too large (max 5MB)', { status: 413 });
 
   const id = base62Id(11);
-  const r2Key = `img/${id}`;
+  const kvKey = `img:${id}`;
   const now = Math.floor(Date.now() / 1000);
   const expires = now + 24 * 3600;
 
-  await env.BUCKET.put(r2Key, buf, {
-    httpMetadata: { contentType: 'application/octet-stream' }
-  });
+  // KV: 24h automatic expiration
+  await env.KV.put(kvKey, buf, { expirationTtl: 24 * 3600 });
 
   await env.DB.prepare(
-    `INSERT INTO images (id, key_hash, r2_key, mime, iv_b64u, size, created_at, expires_at, consumed_at)
+    `INSERT INTO images (id, key_hash, kv_key, mime, iv_b64u, size, created_at, expires_at, consumed_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL)`
-  ).bind(id, keyHash, r2Key, mime, ivB64u, size, now, expires).run();
+  ).bind(id, keyHash, kvKey, mime, ivB64u, size, now, expires).run();
 
   const origin = new URL(request.url).origin;
   const url = `${origin}/${id}`;

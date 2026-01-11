@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS images (
   id TEXT PRIMARY KEY,
   key_hash TEXT NOT NULL,
-  r2_key TEXT NOT NULL,
+  kv_key TEXT NOT NULL,
   mime TEXT NOT NULL,
   iv_b64u TEXT NOT NULL,
   size INTEGER NOT NULL,
