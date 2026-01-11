@@ -20,6 +20,11 @@ function lockDown(){
 }
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
+function getBurnId(){
+  const el = document.querySelector('meta[name="burn-id"]');
+  return el?.getAttribute('content') || '';
+}
+
 async function fetchCipher(id, keyHash){
   const maxTry = 6;
   const delays = [0, 250, 400, 650, 1000, 1500];
@@ -32,7 +37,7 @@ async function fetchCipher(id, keyHash){
 
     if(res.status === 503){
       lastText = await res.text().catch(()=> '');
-      continue; // retry
+      continue;
     }
     if(!res.ok){
       const t = await res.text().catch(()=> '');
@@ -49,19 +54,33 @@ async function fetchCipher(id, keyHash){
 async function main(){
   lockDown();
 
+  const id = getBurnId();
+  if(!id){
+    document.body.textContent = '缺少 id。';
+    return;
+  }
+
   const keyB64u = (location.hash || '').replace(/^#/, '');
   if(!keyB64u){
     document.body.textContent = '缺少解密密钥（#key）。';
     return;
   }
+
+  // Immediately remove #key from address bar (avoid leaking via copy/paste/screen)
+  history.replaceState(null, '', location.pathname + location.search);
+
   const keyBytes = b64uToBytes(keyB64u);
   const keyHash = await sha256Hex(keyBytes);
 
-  const { mime, ivB64u, cipherBuf } = await fetchCipher(window.__BURN_ID__, keyHash);
+  const { mime, ivB64u, cipherBuf } = await fetchCipher(id, keyHash);
   const ivBytes = b64uToBytes(ivB64u);
 
   const key = await crypto.subtle.importKey('raw', keyBytes, {name:'AES-GCM'}, false, ['decrypt']);
   const plainBuf = await crypto.subtle.decrypt({name:'AES-GCM', iv: ivBytes}, key, cipherBuf);
+
+  // try to drop secrets
+  // (best-effort; JS engines may keep copies)
+  keyBytes.fill(0);
 
   const blob = new Blob([plainBuf], {type: mime});
   const url = URL.createObjectURL(blob);

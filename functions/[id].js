@@ -24,7 +24,10 @@ function notFoundHtml() {
   </div>
 </body>
 </html>`;
-  return new Response(html, { status: 404, headers: { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-store' } });
+  return new Response(html, {
+    status: 404,
+    headers: { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-store, max-age=0' }
+  });
 }
 
 function viewHtml(id) {
@@ -35,22 +38,23 @@ function viewHtml(id) {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>burn</title>
 <meta name="referrer" content="no-referrer"/>
+<meta name="burn-id" content="${id}"/>
 <style>
   html,body{height:100%}
   body{margin:0;background:#000;overflow:hidden}
 </style>
 </head>
 <body>
-<script>
-  window.__BURN_ID__ = ${JSON.stringify(id)};
-</script>
 <script src="/view.js"></script>
 </body>
 </html>`;
-  return new Response(html, { status: 200, headers: { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-store' } });
+  return new Response(html, {
+    status: 200,
+    headers: { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-store, max-age=0' }
+  });
 }
 
-export async function onRequest({ request, env, params }) {
+export async function onRequest({ env, params }) {
   const id = String(params.id || '');
   if (!/^b[0-9a-zA-Z]{1,64}$/.test(id)) return notFoundHtml();
 
@@ -62,7 +66,6 @@ export async function onRequest({ request, env, params }) {
   if (!row) return notFoundHtml();
   if (row.consumed_at !== null) return notFoundHtml();
   if (Number(row.expires_at) <= now) {
-    // 过期：清理 D1（R2 由 lifecycle 或后续访问清理）
     await env.DB.prepare(`DELETE FROM images WHERE id = ?1`).bind(id).run();
     return notFoundHtml();
   }
