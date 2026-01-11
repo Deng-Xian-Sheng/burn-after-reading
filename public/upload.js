@@ -15,6 +15,11 @@ function setStatus(msg){
   statusEl.classList.remove('hidden');
   statusEl.textContent = msg;
 }
+function clearResult(){
+  resultEl.classList.add('hidden');
+  linkEl.textContent = '';
+  openBtn.href = '#';
+}
 function showResult(url){
   resultEl.classList.remove('hidden');
   linkEl.textContent = url;
@@ -65,7 +70,7 @@ async function uploadEncrypted({cipherBytes, keyBytes, ivBytes, mime}){
 }
 
 async function handleFile(file){
-  resultEl.classList.add('hidden');
+  clearResult();
   if(!file) return;
 
   if(file.size > MAX_BYTES){
@@ -91,8 +96,20 @@ async function handleFile(file){
   showResult(fullUrl);
 }
 
-pickBtn.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+// Important: allow selecting the SAME file again by resetting input.value
+pickBtn.addEventListener('click', () => {
+  fileInput.value = '';
+  fileInput.click();
+});
+
+fileInput.addEventListener('change', async () => {
+  try {
+    await handleFile(fileInput.files[0]);
+  } finally {
+    // reset again after handling
+    fileInput.value = '';
+  }
+});
 
 pasteHintBtn.addEventListener('click', () => {
   setStatus('请直接在此页面按 Ctrl+V 粘贴图片。');

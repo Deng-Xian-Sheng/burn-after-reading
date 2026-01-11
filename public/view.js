@@ -19,13 +19,73 @@ function lockDown(){
   }, {capture:true});
 }
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+function nextFrame(){ return new Promise(r => requestAnimationFrame(() => r())); }
 
 function getBurnId(){
   const el = document.querySelector('meta[name="burn-id"]');
   return el?.getAttribute('content') || '';
 }
 
+/* ---------- lightweight loading UI ---------- */
+let loadingEl = null;
+function ensureLoading(){
+  if (loadingEl) return loadingEl;
+  document.body.style.margin = '0';
+  document.body.style.height = '100vh';
+  document.body.style.background = '#000';
+  document.body.style.color = '#e8eaed';
+  document.body.style.fontFamily = 'ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial';
+
+  const wrap = document.createElement('div');
+  wrap.style.position = 'fixed';
+  wrap.style.inset = '0';
+  wrap.style.display = 'flex';
+  wrap.style.alignItems = 'center';
+  wrap.style.justifyContent = 'center';
+  wrap.style.flexDirection = 'column';
+  wrap.style.gap = '10px';
+  wrap.style.background = '#000';
+  wrap.style.zIndex = '9999';
+
+  const spinner = document.createElement('div');
+  spinner.style.width = '28px';
+  spinner.style.height = '28px';
+  spinner.style.border = '3px solid rgba(255,255,255,0.18)';
+  spinner.style.borderTopColor = 'rgba(255,255,255,0.8)';
+  spinner.style.borderRadius = '999px';
+  spinner.style.animation = 'spin 0.9s linear infinite';
+
+  const text = document.createElement('div');
+  text.style.color = '#9aa0a6';
+  text.style.fontSize = '14px';
+  text.textContent = '加载中…';
+
+  const style = document.createElement('style');
+  style.textContent = `@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`;
+
+  wrap.appendChild(style);
+  wrap.appendChild(spinner);
+  wrap.appendChild(text);
+
+  wrap._text = text;
+  loadingEl = wrap;
+  document.body.appendChild(wrap);
+  return wrap;
+}
+async function setLoading(msg){
+  const el = ensureLoading();
+  el._text.textContent = msg;
+  // give browser a chance to paint the new text
+  await nextFrame();
+}
+function hideLoading(){
+  if (loadingEl) loadingEl.remove();
+  loadingEl = null;
+}
+
+/* ---------- burn view ---------- */
 function renderBurned(reason){
+  hideLoading();
   document.body.innerHTML = '';
   document.body.style.margin = '0';
   document.body.style.height = '100vh';
@@ -75,7 +135,6 @@ function setupAutoBurn(id){
     if (sessionStorage.getItem(k) === '1') burnNow('本标签页已查看过');
   } catch {}
 
-  // When page goes background / is being unloaded, burn the view
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) burnNow('页面进入后台');
   });
@@ -122,28 +181,37 @@ async function main(){
     return;
   }
 
-  const burner = setupAutoBurn(id);
+  setupAutoBurn(id);
+
+  await setLoading('正在加载…');
 
   const keyB64u = (location.hash || '').replace(/^#/, '');
   if(!keyB64u){
+    hideLoading();
     document.body.textContent = '缺少解密密钥（#key）。';
     return;
   }
 
-  // Immediately remove #key from address bar (avoid leaking via copy/paste/screen)
+  // Immediately remove #key from address bar
   history.replaceState(null, '', location.pathname + location.search);
+
+  await setLoading('正在获取密文…');
 
   const keyBytes = b64uToBytes(keyB64u);
   const keyHash = await sha256Hex(keyBytes);
 
   const { mime, ivB64u, cipherBuf } = await fetchCipher(id, keyHash);
-  const ivBytes = b64uToBytes(ivB64u);
 
+  await setLoading('正在解密…');
+
+  const ivBytes = b64uToBytes(ivB64u);
   const key = await crypto.subtle.importKey('raw', keyBytes, {name:'AES-GCM'}, false, ['decrypt']);
   const plainBuf = await crypto.subtle.decrypt({name:'AES-GCM', iv: ivBytes}, key, cipherBuf);
 
   // best-effort secret wipe
   keyBytes.fill(0);
+
+  await setLoading('正在渲染…');
 
   const blob = new Blob([plainBuf], {type: mime});
   const url = URL.createObjectURL(blob);
@@ -160,16 +228,15 @@ async function main(){
   img.style.webkitUserDrag = 'none';
   img.style.webkitTouchCallout = 'none';
 
+  img.onload = () => hideLoading();
+
   document.body.style.margin = '0';
   document.body.style.background = '#000';
   document.body.appendChild(img);
 
-  // Mark as viewed in this tab AFTER successfully rendering
   try { sessionStorage.setItem(`burn:viewed:${id}`, '1'); } catch {}
-
-  // If you want to burn immediately after first paint (very aggressive), uncomment:
-  // setTimeout(() => burner.burnNow('已展示完成'), 0);
 }
 main().catch(err => {
+  hideLoading();
   document.body.textContent = '解密失败：' + (err?.message || String(err));
 });
