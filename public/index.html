@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>阅后即焚</title>
+  <meta name="description" content="端到端加密的一次性图片分享。"/>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="brand">阅后即焚</div>
+      <p class="sub">拖放 / 选择 / 粘贴图片（≤ 5MB），生成一次性链接</p>
+
+      <div id="drop" class="drop">
+        <div>把图片拖到这里，或点击下面按钮选择文件</div>
+        <div class="row">
+          <button class="btn" id="pickBtn">选择图片</button>
+          <button class="btn" id="pasteHintBtn" title="只做提示，粘贴请直接 Ctrl+V">粘贴（Ctrl+V）</button>
+        </div>
+        <div class="small">上传前在浏览器完成 AES-GCM 加密；服务端只存密文。</div>
+      </div>
+
+      <input id="fileInput" type="file" accept="image/*" class="hidden"/>
+
+      <div id="status" class="out hidden"></div>
+      <div id="result" class="out hidden">
+        <div class="small">链接（包含 #key，请妥善保存；丢失无法找回）：</div>
+        <div class="code" id="link"></div>
+        <div class="row" style="justify-content:flex-start;margin-top:10px;">
+          <button class="btn" id="copyBtn">复制链接</button>
+          <a class="btn" id="openBtn" href="#" target="_blank" rel="noreferrer">打开</a>
+        </div>
+      </div>
+
+      <div class="small">提示：无法完全阻止截图/屏摄；但会尽可能限制右键、拖拽、长按保存等。</div>
+    </div>
+  </div>
+
+  <script src="/upload.js"></script>
+</body>
+</html>

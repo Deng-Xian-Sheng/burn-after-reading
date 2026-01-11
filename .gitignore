@@ -1,0 +1,14 @@
+# Cloudflare / Wrangler
+.wrangler/
+.dev.vars
+.env
+.env.*
+*.log
+
+# Node (optional, for local wrangler)
+node_modules/
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/

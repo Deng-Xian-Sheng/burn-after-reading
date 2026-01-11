@@ -1,0 +1,16 @@
+name = "burn-after-reading"
+compatibility_date = "2025-01-01"
+
+# For Pages, bindings are usually set in dashboard.
+# This file is mainly for local wrangler usage.
+# [vars]
+# MAX_UPLOAD_BYTES = "5242880"
+
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "burn_db"
+# database_id = "xxxxx"
+
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "burn-images"
